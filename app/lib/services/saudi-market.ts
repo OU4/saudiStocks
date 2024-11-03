@@ -1,84 +1,81 @@
-// lib/services/saudi-market.ts
+// // services/saudi-market.ts
 
-const API_KEY = process.env.NEXT_PUBLIC_TWELVE_DATA_API_KEY;
-const BASE_URL = 'https://api.twelvedata.com';
+// import { API_KEY, API_URL } from '@/app/config/market';
 
-export interface SaudiStock {
-  symbol: string;
-  name: string;
-  currency: string;
-  exchange: string;
-  mic_code: string;
-  country: string;
-  type: string;
-  figi_code: string;
-}
+// export interface SaudiSymbol {
+//   symbol: string;
+//   name: string;
+//   currency: string;
+//   exchange: string;
+//   mic_code: string;
+//   type: string;
+//   logo_url?: string; // Will be added from another API or local storage
+// }
 
-export interface TimeSeries {
-  datetime: string;
-  open: string;
-  high: string;
-  low: string;
-  close: string;
-  volume: string;
-}
+// export async function fetchSaudiSymbols(): Promise<SaudiSymbol[]> {
+//   try {
+//     // Fetch all stocks with Saudi Arabia filter
+//     const response = await fetch(
+//       `${API_URL}/stocks?country=Saudi Arabia&apikey=${API_KEY}`
+//     );
 
-class SaudiMarketService {
-  // Fetch all Saudi stocks
-  async getSaudiStocks(): Promise<SaudiStock[]> {
-    try {
-      const response = await fetch(
-        `${BASE_URL}/stocks?country=Saudi Arabia&apikey=${API_KEY}`
-      );
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error fetching Saudi stocks:', error);
-      throw error;
-    }
-  }
+//     if (!response.ok) {
+//       throw new Error('Failed to fetch Saudi stocks');
+//     }
 
-  // Get time series data for a specific stock
-  async getTimeSeries(symbol: string, interval: string = '1day'): Promise<TimeSeries[]> {
-    try {
-      const response = await fetch(
-        `${BASE_URL}/time_series?symbol=${symbol}&interval=${interval}&apikey=${API_KEY}`
-      );
-      const data = await response.json();
-      return data.values;
-    } catch (error) {
-      console.error(`Error fetching time series for ${symbol}:`, error);
-      throw error;
-    }
-  }
+//     const data = await response.json();
+//     const stocks = Array.isArray(data) ? data : data.data || [];
 
-  // Get real-time quote for a stock
-  async getRealTimeQuote(symbol: string) {
-    try {
-      const response = await fetch(
-        `${BASE_URL}/quote?symbol=${symbol}&apikey=${API_KEY}`
-      );
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error(`Error fetching quote for ${symbol}:`, error);
-      throw error;
-    }
-  }
+//     // Map and add logo URLs
+//     // We'll need to either:
+//     // 1. Use another API to get logos
+//     // 2. Store logos locally
+//     // 3. Generate placeholder logos
+//     return stocks.map(stock => ({
+//       ...stock,
+//       logo_url: `/logos/${stock.symbol}.png` // This path will need to be adjusted
+//     }));
 
-  // Get WebSocket connection for real-time updates
-  getWebSocketConnection(symbols: string[]) {
-    const ws = new WebSocket(`wss://ws.twelvedata.com/v1/quotes/price?apikey=${API_KEY}`);
-    
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        action: "subscribe",
-        params: {
-          symbols: symbols.join(',')
-        }
-      }));
-    };
+//   } catch (error) {
+//     console.error('Error fetching Saudi symbols:', error);
+//     throw error;
+//   }
+// }
 
-    return ws;
-  }
-}
+// // Function to get logo URL for a symbol
+// export async function getCompanyLogo(symbol: string): Promise<string> {
+//   // We can implement this in several ways:
+//   // 1. Use a financial API that provides logos
+//   // 2. Scrape from Tadawul website
+//   // 3. Store logos locally
+//   // 4. Generate placeholder logos
+
+//   // For now, return a placeholder
+//   return `https://ui-avatars.com/api/?name=${encodeURIComponent(symbol)}&background=random`;
+// }
+
+// // Function to get company details
+// export interface CompanyDetails {
+//   symbol: string;
+//   name: string;
+//   sector: string;
+//   industry: string;
+//   website?: string;
+//   description?: string;
+//   market_cap?: number;
+//   employees?: number;
+//   ceo?: string;
+//   headquarters?: string;
+//   founded?: string;
+// }
+
+// export async function getCompanyDetails(symbol: string): Promise<CompanyDetails | null> {
+//   try {
+//     // This would need to be implemented with actual data source
+//     // Could be from Tadawul API or another financial data provider
+//     return null;
+//   } catch (error) {
+//     console.error(`Error fetching details for ${symbol}:`, error);
+//     return null;
+//   }
+// }

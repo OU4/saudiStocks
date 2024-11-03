@@ -41,6 +41,7 @@ export function MarketTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  
 
   const fetchMarketData = async () => {
     try {
