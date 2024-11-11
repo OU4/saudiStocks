@@ -4,7 +4,7 @@ import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
 import { Loader2 } from "lucide-react";
 import "highlight.js/styles/atom-one-dark.css";
-import { ChatResponse } from "@/app/types/chat";
+import { ChatResponse } from "@/app/market/types/chat";
 import FinancialContext from "./FinancialContext";
 import { Button } from "@/components/ui/button";
 

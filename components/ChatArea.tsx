@@ -9,7 +9,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from 'sonner';
 import { MessageContent } from './chat/MessageContent';
-import { Message } from "@/app/types/chat";
+import { Message } from "@/app/market/types/chat";
 
 
 function ChatArea() {

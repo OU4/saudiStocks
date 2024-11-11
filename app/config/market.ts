@@ -15,6 +15,8 @@ export interface CompanyLogo {
   url: string;
 }
 
+
+
 export const SAUDI_MARKET = {
   exchange: 'Tadawul',
   mic_code: 'XSAU',

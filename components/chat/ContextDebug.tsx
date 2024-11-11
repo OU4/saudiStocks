@@ -1,7 +1,7 @@
 // /app/components/chat/ContextDebug.tsx
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Message } from '@/app/types/chat';
+import { Message } from '@/app/market/types/chat';
 
 interface ContextDebugProps {
   messages: Message[];
