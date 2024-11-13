@@ -2,6 +2,7 @@
 
 export const API_KEY = process.env.NEXT_PUBLIC_TWELVE_DATA_API_KEY || 'demo';
 export const API_URL = 'https://api.twelvedata.com';
+export const WS_URL = 'wss://ws.twelvedata.com/v1/quotes/price';
 
 export interface CompanyLogo {
   meta: {
@@ -14,6 +15,13 @@ export interface CompanyLogo {
   };
   url: string;
 }
+
+
+// Helper function to format symbol for API calls
+export function formatSymbol(tickerSymbol: string) {
+    return `${tickerSymbol}:TADAWUL`;
+  }
+
 
 
 

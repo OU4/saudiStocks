@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -18,7 +19,13 @@ import {
   SAUDI_MARKET
 } from '@/app/config/market';
 import { cn } from '@/lib/utils';
-import { Loader2, Clock } from 'lucide-react';
+import { Loader2, Clock, TrendingUp, TrendingDown } from 'lucide-react';
+
+// components/MarketTable.tsx
+// ... (previous imports remain the same)
+
+// Take only the first 10 symbols for rate limiting
+const LIMITED_SYMBOLS = SAUDI_SYMBOLS.slice(0, 10);
 
 interface TimeSeriesData {
   meta: {
@@ -36,34 +43,48 @@ interface TimeSeriesData {
   }[];
   status: string;
 }
+
+interface MarketStats {
+  change: string;
+  percentChange: string;
+  volume: string;
+}
+
 export function MarketTable() {
+  const router = useRouter();
   const [marketData, setMarketData] = useState<Record<string, TimeSeriesData>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  
 
+  // Fetch market data function
   const fetchMarketData = async () => {
     try {
       setLoading(true);
-      console.log('Fetching market data...');
-
-      const dataPromises = SAUDI_SYMBOLS.map(async (stock) => {
+      
+      const dataPromises = LIMITED_SYMBOLS.map(async (stock) => {
         const response = await fetch(
-          `${API_URL}/time_series?symbol=${stock.symbol}:Tadawul&interval=1min&apikey=${API_KEY}`
+          `${API_URL}/time_series?symbol=${stock.symbol}&interval=1min&apikey=${API_KEY}`
         );
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch data for ${stock.symbol}`);
+          const errorData = await response.json();
+          throw new Error(errorData.message || `Failed to fetch ${stock.symbol}`);
         }
 
         const data = await response.json();
         return [stock.symbol, data] as [string, TimeSeriesData];
       });
 
-      const results = await Promise.all(dataPromises);
-      const newData = Object.fromEntries(results);
-      console.log('Market data:', newData);
+      const results = await Promise.allSettled(dataPromises);
+      const newData: Record<string, TimeSeriesData> = {};
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          const [symbol, data] = result.value;
+          newData[symbol] = data;
+        }
+      });
 
       setMarketData(newData);
       setLastUpdate(new Date());
@@ -76,12 +97,7 @@ export function MarketTable() {
     }
   };
 
-  useEffect(() => {
-    fetchMarketData();
-    const interval = setInterval(fetchMarketData, 60000); // Update every minute
-    return () => clearInterval(interval);
-  }, []);
-
+  // Format helpers
   const formatPrice = (value?: string) => {
     if (!value) return '-';
     return new Intl.NumberFormat('en-SA', {
@@ -91,35 +107,11 @@ export function MarketTable() {
     }).format(parseFloat(value));
   };
 
-  const calculateDailyStats = (values?: TimeSeriesData['values']) => {
-    if (!values || values.length === 0) return {
-      change: '-',
-      percentChange: '-',
-      volume: '-'
-    };
-
-    // Get today's total volume by summing all volumes
-    const totalVolume = values.reduce((sum, value) => sum + (parseInt(value.volume) || 0), 0);
-    
-    // Get price changes
-    const current = parseFloat(values[0].close);
-    const previous = parseFloat(values[values.length - 1].close);
-    const change = current - previous;
-    const percentChange = (change / previous) * 100;
-
-    return {
-      change: change.toFixed(2),
-      percentChange: percentChange.toFixed(2),
-      volume: totalVolume.toString()
-    };
-  };
-
   const formatVolume = (value: string | number) => {
     if (!value || value === '-') return '-';
     const num = typeof value === 'string' ? parseInt(value) : value;
     if (num === 0) return '-';
     
-    // Format large numbers with K, M, B suffixes
     if (num >= 1000000000) {
       return `${(num / 1000000000).toFixed(2)}B`;
     }
@@ -132,18 +124,61 @@ export function MarketTable() {
     return num.toLocaleString('en-SA');
   };
 
+  // Market data calculations
   const calculateChange = (values?: TimeSeriesData['values']) => {
-    if (!values || values.length < 2) return { change: '-', percentChange: '-' };
+    if (!values || values.length < 2) {
+      return {
+        change: '0',
+        percentChange: '0'
+      };
+    }
+
     const current = parseFloat(values[0].close);
-    const previous = parseFloat(values[1].close);
+    const previous = parseFloat(values[values.length - 1].close);
     const change = current - previous;
     const percentChange = (change / previous) * 100;
+
     return {
       change: change.toFixed(2),
       percentChange: percentChange.toFixed(2)
     };
   };
 
+  const calculateDailyStats = (values?: TimeSeriesData['values']): MarketStats => {
+    if (!values || values.length === 0) {
+      return {
+        change: '-',
+        percentChange: '-',
+        volume: '-'
+      };
+    }
+
+    // Calculate total volume
+    const totalVolume = values.reduce((sum, value) => 
+      sum + (parseInt(value.volume) || 0), 0
+    );
+
+    // Calculate price changes
+    const current = parseFloat(values[0].close);
+    const previous = parseFloat(values[values.length - 1].close);
+    const change = current - previous;
+    const percentChange = (change / previous) * 100;
+
+    return {
+      change: change.toFixed(2),
+      percentChange: percentChange.toFixed(2),
+      volume: totalVolume.toString()
+    };
+  };
+
+  // Effect for data fetching
+  useEffect(() => {
+    fetchMarketData();
+    const interval = setInterval(fetchMarketData, 300000); // 5 minutes
+    return () => clearInterval(interval);
+  }, []);
+
+  // Component render
   return (
     <Card className="w-full">
       <div className="p-4 flex justify-between items-center">
@@ -157,6 +192,9 @@ export function MarketTable() {
                 Last updated: {lastUpdate.toLocaleTimeString()}
               </span>
             )}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Showing top {LIMITED_SYMBOLS.length} stocks
           </p>
         </div>
         <button
@@ -211,24 +249,31 @@ export function MarketTable() {
               </TableCell>
             </TableRow>
           ) : (
-            SAUDI_SYMBOLS.map((stock) => {
+            LIMITED_SYMBOLS.map((stock) => {
               const data = marketData[stock.symbol];
               const latestValues = data?.values?.[0];
               const changes = calculateChange(data?.values);
               const stats = calculateDailyStats(data?.values);
 
-
               return (
-                <TableRow key={stock.symbol} className="hover:bg-muted/50">
-                  <TableCell className="font-medium">{stock.symbol}</TableCell>
+                <TableRow 
+                  key={stock.symbol} 
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => router.push(`/market/${stock.tickerSymbol}`)}
+                >
+                  <TableCell className="font-medium">{stock.tickerSymbol}</TableCell>
                   <TableCell>{stock.name}</TableCell>
                   <TableCell className="text-right">
                     {formatPrice(latestValues?.close)}
                   </TableCell>
                   <TableCell className={cn(
-                    "text-right",
+                    "text-right flex items-center justify-end gap-1",
                     parseFloat(changes.change) > 0 ? "text-green-500" : "text-red-500"
                   )}>
+                    {parseFloat(changes.change) > 0 ? 
+                      <TrendingUp className="w-4 h-4" /> : 
+                      <TrendingDown className="w-4 h-4" />
+                    }
                     {formatPrice(changes.change)}
                   </TableCell>
                   <TableCell className={cn(
@@ -239,7 +284,8 @@ export function MarketTable() {
                   </TableCell>
                   <TableCell className="text-right font-mono">
                     {formatVolume(stats.volume)}
-                  </TableCell>                </TableRow>
+                  </TableCell>
+                </TableRow>
               );
             })
           )}
