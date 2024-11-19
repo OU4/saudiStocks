@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, MinusCircle, AlertTriangle, BarChart2, BookOpen } from 'lucide-react';
+import { MessageContent } from './MessageContent';
 
 interface FinancialContextProps {
   context: {
@@ -14,85 +15,38 @@ interface FinancialContextProps {
 }
 
 const FinancialContext: React.FC<FinancialContextProps> = ({ context }) => {
-  const getSentimentIcon = () => {
-    switch (context.market_sentiment) {
-      case 'bullish':
-        return <TrendingUp className="h-4 w-4 text-green-500" />;
-      case 'bearish':
-        return <TrendingDown className="h-4 w-4 text-red-500" />;
-      default:
-        return <MinusCircle className="h-4 w-4 text-gray-500" />;
-    }
-  };
+  const instrumentsMentioned = context.instruments_mentioned || [];
+  const technicalIndicators = context.technical_indicators || [];
+  const fundamentalFactors = context.fundamental_factors || [];
 
-  const getRiskIcon = () => {
-    switch (context.risk_level) {
-      case 'high':
-        return <AlertTriangle className="h-4 w-4 text-red-500" />;
-      case 'medium':
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'low':
-        return <AlertTriangle className="h-4 w-4 text-green-500" />;
-    }
-  };
+  const renderSection = (icon: JSX.Element, title: string, content: string | JSX.Element) => (
+    <div className="flex items-center gap-2">
+      {icon}
+      <span className="font-medium">{title}:</span>
+      <span className="text-muted-foreground">{content}</span>
+    </div>
+  );
 
   return (
     <Card className="bg-muted/50 shadow-none">
       <CardContent className="p-3 text-sm">
         <div className="space-y-2">
-          {context.instruments_mentioned.length > 0 && (
-            <div className="flex items-center gap-2">
-              <BarChart2 className="h-4 w-4" />
-              <span className="font-medium">Instruments:</span>
-              <span className="text-muted-foreground">
-                {context.instruments_mentioned.join(', ')}
-              </span>
-            </div>
-          )}
+          {instrumentsMentioned.length > 0 &&
+            renderSection(<BarChart2 className="h-4 w-4" />, 'Instruments', instrumentsMentioned.join(', '))}
 
-          <div className="flex items-center gap-2">
-            {getSentimentIcon()}
-            <span className="font-medium">Market Sentiment:</span>
-            <span className="text-muted-foreground capitalize">
-              {context.market_sentiment}
-            </span>
-          </div>
+          {/* {renderSection(getSentimentIcon(), 'Market Sentiment', context.market_sentiment)}
 
-          <div className="flex items-center gap-2">
-            {getRiskIcon()}
-            <span className="font-medium">Risk Level:</span>
-            <span className="text-muted-foreground capitalize">
-              {context.risk_level}
-            </span>
-          </div>
+          {renderSection(getRiskIcon(), 'Risk Level', context.risk_level)} */}
 
-          {context.technical_indicators.length > 0 && (
-            <div className="flex items-start gap-2">
-              <BarChart2 className="h-4 w-4 mt-1" />
-              <div>
-                <span className="font-medium">Technical Indicators:</span>
-                <div className="text-muted-foreground">
-                  {context.technical_indicators.join(', ')}
-                </div>
-              </div>
-            </div>
-          )}
+          {technicalIndicators.length > 0 &&
+            renderSection(<BarChart2 className="h-4 w-4 mt-1" />, 'Technical Indicators', technicalIndicators.join(', '))}
 
-          {context.fundamental_factors.length > 0 && (
-            <div className="flex items-start gap-2">
-              <BookOpen className="h-4 w-4 mt-1" />
-              <div>
-                <span className="font-medium">Fundamental Factors:</span>
-                <div className="text-muted-foreground">
-                  {context.fundamental_factors.join(', ')}
-                </div>
-              </div>
-            </div>
-          )}
+          {fundamentalFactors.length > 0 &&
+            renderSection(<BookOpen className="h-4 w-4 mt-1" />, 'Fundamental Factors', fundamentalFactors.join(', '))}
 
           <div className="flex items-center gap-2">
             <div className="flex-grow bg-secondary h-1.5 rounded">
-              <div 
+              <div
                 className="bg-primary h-full rounded"
                 style={{ width: `${context.confidence_score * 100}%` }}
               />
@@ -106,5 +60,4 @@ const FinancialContext: React.FC<FinancialContextProps> = ({ context }) => {
     </Card>
   );
 };
-
 export default FinancialContext;
