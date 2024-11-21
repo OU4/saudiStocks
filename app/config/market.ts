@@ -1,6 +1,6 @@
 // /app/config/market.ts
 
-export const API_KEY = process.env.NEXT_PUBLIC_TWELVE_DATA_API_KEY || 'demo';
+export const API_KEY = process.env.NEXT_PUBLIC_TWELVE_DATA_API_KEY || 'b82e4abed0b347e7bd07c5d33cc753e3';
 export const API_URL = 'https://api.twelvedata.com';
 export const WS_URL = 'wss://ws.twelvedata.com/v1/quotes/price';
 

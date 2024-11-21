@@ -1,16 +1,20 @@
 // app/api/market/quotes/route.ts
 import { NextResponse } from "next/server";
 import { API_KEY, API_URL } from "@/app/config/market";
+import { MarketDataError } from '@/app/lib/errors';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const symbols = searchParams.get("symbols");
 
   if (!symbols) {
-    return NextResponse.json({ error: "Symbols are required" }, { status: 400 });
-  }
-
-  try {
+    throw new MarketDataError(
+      'VALIDATION_ERROR',
+      'Symbol is required',
+      'error',
+      { timestamp: new Date().toISOString() }
+    );
+  }  try {
     const response = await fetch(
       `${API_URL}/quote?symbol=${symbols}&apikey=${API_KEY}`
     );
@@ -55,8 +59,20 @@ export async function GET(request: Request) {
 
     return NextResponse.json(quotes);
   } catch (error) {
-    console.error("Error fetching quotes:", error);
-    
+    if (error instanceof MarketDataError) {
+      return new Response(
+        JSON.stringify({
+          error: error.message,
+          code: error.code,
+          severity: error.severity,
+          metadata: error.metadata
+        }),
+        { 
+          status: error.severity === 'critical' ? 500 : 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }    
     // Return sample data in case of error
     const sampleData = symbols.split(",").reduce((acc: any, symbol) => {
       acc[symbol] = {
@@ -69,5 +85,8 @@ export async function GET(request: Request) {
     }, {});
 
     return NextResponse.json(sampleData);
+    
   }
+
+  
 }

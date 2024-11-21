@@ -88,12 +88,15 @@ const TopNavBar = () => {
   return (
     <nav className="text-foreground p-4 flex justify-between items-center">
       <div className="font-bold text-xl flex gap-2 items-center">
-        <Image
+        {/* <Image
           src={theme === "dark" ? "/wordmark-dark.svg" : "/wordmark.svg"}
           alt="Company Wordmark"
           width={112}
           height={20}
-        />
+        /> */}
+        <p>
+        TASI
+        </p>
       </div>
       <div className="flex items-center gap-2">
         <DropdownMenu>
@@ -143,9 +146,9 @@ const TopNavBar = () => {
           target="_blank"
           rel="noopener noreferrer"
         >
-          <Button variant="outline" className="text-foreground">
+          {/* <Button variant="outline" className="text-foreground">
             Deploy your own
-          </Button>
+          </Button> */}
         </Link>
       </div>
     </nav>

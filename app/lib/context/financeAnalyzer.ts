@@ -3,6 +3,43 @@
 import { SAUDI_SYMBOLS } from '@/app/config/market';
 import { CompanyContext } from './types';
 
+interface CompanyMatch {
+  symbol: string;
+  name: string;
+  sector?: string;
+  isContinuedDiscussion: boolean;
+  confidence: number;
+}
+interface MatchConfidence {
+  symbolMatch: boolean;
+  nameMatch: boolean;
+  arabicMatch: boolean;
+  partialMatch: boolean;
+  contextualRelevance: boolean;
+}
+interface StockQuote {
+  symbol: string;
+  price: number;
+  change: number;
+  percentChange: number;
+  volume: number;
+  lastUpdated: string;
+}
+interface MarketData {
+  [symbol: string]: {
+    values: {
+      close: number;
+      open: number;
+      high: number;
+      low: number;
+      volume: number;
+      datetime: string;
+    }[];
+  };
+}
+
+
+
 export class FinanceAnalyzer {
   // Known financial instruments and companies
   private static readonly SAUDI_MARKET_TERMS = new Set([
@@ -52,6 +89,25 @@ export class FinanceAnalyzer {
     'price', 'valuation', 'target', 'rating', 'upgrade', 'downgrade'
   ]);
 
+  private static calculateMatchConfidence(matches: {
+    symbolMatch: boolean;
+    nameMatch: boolean;
+    arabicMatch: boolean;
+    partialMatch: boolean;
+    contextualRelevance: boolean;
+  }): number {
+    let confidence = 0;
+    
+    if (matches.symbolMatch) confidence += 0.4;
+    if (matches.nameMatch) confidence += 0.3;
+    if (matches.arabicMatch) confidence += 0.3;
+    if (matches.partialMatch) confidence += 0.2;
+    if (matches.contextualRelevance) confidence += 0.1;
+    // Normalize confidence to be between 0 and 1
+    return Math.min(1, confidence);
+  }
+    
+  
   public static analyzeFinancialContext(
     message: string,
     currentCompany?: CompanyContext
@@ -62,6 +118,7 @@ export class FinanceAnalyzer {
       name: string;
       sector?: string;
       isContinuedDiscussion: boolean;
+      confidence: number;
     }>;
     technicalIndicators: string[];
     fundamentalFactors: string[];
@@ -81,7 +138,7 @@ export class FinanceAnalyzer {
   } {
     const text = message.toLowerCase();
     
-    // Analyze company context first
+    // Analyze company context first with enhanced detection
     const companiesAnalysis = this.analyzeCompanyContext(text, currentCompany);
     
     // Extract all indicators and factors
@@ -92,19 +149,19 @@ export class FinanceAnalyzer {
     // Determine market context
     const isSaudiMarket = this.checkSaudiMarketContext(text);
     
-    // Analyze sentiment with company context
+    // Analyze sentiment with enhanced company context
     const sentiment = companiesAnalysis.companies.length > 0
       ? this.analyzeSentimentWithContext(text, companiesAnalysis.companies[0])
       : this.determineSentiment(text);
 
-    // Determine analysis type
+    // Determine analysis type with enhanced logic
     const analysisType = this.determineAnalysisType(
       technical.length,
       fundamental.length,
       companiesAnalysis.discussionTopics
     );
 
-    // Calculate confidence score
+    // Calculate confidence with enhanced factors
     const confidence = this.calculateConfidence({
       technical: technical.length,
       fundamental: fundamental.length,
@@ -114,7 +171,8 @@ export class FinanceAnalyzer {
       messageLength: text.split(/\s+/).length,
       hasNumbers: /\d+/.test(text),
       isQuestion: text.includes('?'),
-      isSaudiMarket
+      isSaudiMarket,
+      companyConfidence: companiesAnalysis.companies[0]?.confidence || 0
     });
 
     return {
@@ -141,61 +199,71 @@ export class FinanceAnalyzer {
   private static analyzeCompanyContext(
     text: string,
     currentCompany?: CompanyContext
-  ) {
-    const companies: Array<{
-      symbol: string;
-      name: string;
-      sector?: string;
-      isContinuedDiscussion: boolean;
-    }> = [];
-    
+  ): {
+    companies: CompanyMatch[];
+    hasExplicitMention: boolean;
+    continuedDiscussion: boolean;
+    discussionTopics: string[];
+  } {
+    const companies: CompanyMatch[] = [];
     const discussionTopics: string[] = [];
     let hasExplicitMention = false;
     let continuedDiscussion = false;
-
+    // Safely convert text to lowercase
+    const lowerText = (text || '').toLowerCase();
     // First check for explicit company mentions
     SAUDI_SYMBOLS.forEach(stock => {
-      if (
-        text.includes(stock.tickerSymbol.toLowerCase()) ||
-        text.includes(stock.name.toLowerCase()) ||
-        (stock.name_ar && text.includes(stock.name_ar.toLowerCase()))
-      ) {
+      const matches: MatchConfidence = {
+        symbolMatch: Boolean(stock.tickerSymbol && lowerText.includes(stock.tickerSymbol.toLowerCase())),
+        nameMatch: Boolean(stock.name && lowerText.includes(stock.name.toLowerCase())),
+        arabicMatch: Boolean(stock.name_ar && lowerText.includes(stock.name_ar.toLowerCase())),
+        partialMatch: false,
+        contextualRelevance: false
+      };
+      // Check for partial matches if no exact match found
+      if (!matches.symbolMatch && !matches.nameMatch && !matches.arabicMatch) {
+        matches.partialMatch = this.checkPartialMatch(lowerText, stock);
+      }
+      // Check contextual relevance
+      matches.contextualRelevance = this.checkContextualRelevance(lowerText, stock);
+      // Calculate confidence score
+      const confidence = this.calculateMatchConfidence(matches);
+      if (confidence > 0.3) { // Threshold for considering a match
         companies.push({
           symbol: stock.symbol,
           name: stock.name,
           sector: stock.sector,
-          isContinuedDiscussion: false
+          isContinuedDiscussion: false,
+          confidence
         });
         hasExplicitMention = true;
       }
     });
-
     // If no explicit mentions but we have a current company
     if (companies.length === 0 && currentCompany) {
       const hasRelatedTerms = Array.from(this.COMPANY_RELATED_TERMS)
-        .some(term => text.includes(term.toLowerCase()));
+        .some(term => lowerText.includes(term.toLowerCase()));
       
       if (hasRelatedTerms) {
         companies.push({
           symbol: currentCompany.symbol,
           name: currentCompany.name,
           sector: currentCompany.sector,
-          isContinuedDiscussion: true
+          isContinuedDiscussion: true,
+          confidence: 0.4 // Default confidence for continued discussion
         });
         continuedDiscussion = true;
       }
     }
-
     // Extract discussion topics
     if (companies.length > 0) {
       discussionTopics.push(
         ...this.extractTechnicalIndicators(text),
         ...this.extractFundamentalFactors(text),
         ...Array.from(this.COMPANY_RELATED_TERMS)
-          .filter(term => text.includes(term.toLowerCase()))
+          .filter(term => lowerText.includes(term.toLowerCase()))
       );
     }
-
     return {
       companies,
       hasExplicitMention,
@@ -203,7 +271,37 @@ export class FinanceAnalyzer {
       discussionTopics: Array.from(new Set(discussionTopics))
     };
   }
-
+  
+  private static checkPartialMatch(text: string, stock: any): boolean {
+    const words = text.split(/\s+/);
+    const stockNameWords = stock.name?.toLowerCase().split(/\s+/) || [];
+    
+    return stockNameWords.some((word: string) => 
+      word.length > 3 && words.some((textWord: string) => 
+        textWord.includes(word) || word.includes(textWord)
+      )
+    );
+  }
+  
+  
+  
+  
+  private static checkContextualRelevance(text: string, stock: any): boolean {
+    const sectorTerms = this.getSectorTerms(stock.sector);
+    return sectorTerms.some((term: string) => text.includes(term.toLowerCase()));
+  }
+    
+  private static getSectorTerms(sector?: string): string[] {
+    // Add sector-specific terms mapping
+    const sectorTermsMap: { [key: string]: string[] } = {
+      'Technology': ['tech', 'software', 'digital', 'IT'],
+      'Banking': ['bank', 'finance', 'loan', 'deposit'],
+      // Add more sectors as needed
+    };
+    
+    return sector ? (sectorTermsMap[sector] || []) : [];
+  }
+  
   private static checkSaudiMarketContext(text: string): boolean {
     return Array.from(this.SAUDI_MARKET_TERMS)
       .some(term => text.includes(term.toLowerCase()));
@@ -228,7 +326,6 @@ export class FinanceAnalyzer {
     text: string,
     company: { symbol: string; name: string }
   ): 'bullish' | 'bearish' | 'neutral' {
-    // Look for sentiment near company mentions
     const words = text.split(/\s+/);
     const companyIndex = words.findIndex(word => 
       word.includes(company.name.toLowerCase()) ||
@@ -236,7 +333,6 @@ export class FinanceAnalyzer {
     );
 
     if (companyIndex !== -1) {
-      // Analyze sentiment in company context (5 words before and after)
       const start = Math.max(0, companyIndex - 5);
       const end = Math.min(words.length, companyIndex + 6);
       const contextText = words.slice(start, end).join(' ');
@@ -310,12 +406,14 @@ export class FinanceAnalyzer {
     hasNumbers: boolean;
     isQuestion: boolean;
     isSaudiMarket: boolean;
+    companyConfidence: number;
   }): number {
     let confidence = 0.5; // Base confidence
 
     // Company context factors
     if (factors.hasExplicitCompany) confidence += 0.2;
     if (factors.isContinuedDiscussion) confidence += 0.1;
+    confidence += factors.companyConfidence * 0.2;
     
     // Analysis depth factors
     if (factors.technical > 0) confidence += 0.1;
