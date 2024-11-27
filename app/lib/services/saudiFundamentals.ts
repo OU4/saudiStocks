@@ -238,171 +238,214 @@ interface IncomeStatementResponse {
   }>;
 }
 
+// app/lib/services/saudiFundamentals.ts
+
 export class SaudiFundamentals {
   private static readonly CACHE_DURATION = 300000; // 5 minutes
-  private static cache: Map<string, { data: FundamentalData; timestamp: number }> = new Map();
+  private static cache: Map<string, { data: any; timestamp: number }> = new Map();
 
-  private static async fetchWithCache(url: string): Promise<any> {
-    const cached = this.cache.get(url);
-    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-      return cached.data;
-    }
-
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const data = await response.json();
-      this.cache.set(url, { data, timestamp: Date.now() });
-      return data;
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      throw error;
-    }
-  }
-
-  static async getFundamental(symbol: string): Promise<FundamentalData | null> {
+  static async getFundamental(symbol: string): Promise<any> {
     try {
       const stockInfo = SAUDI_SYMBOLS.find(s => s.symbol === symbol);
       if (!stockInfo) return null;
 
-      const formattedSymbol = stockInfo.tickerSymbol;
+      const formattedSymbol = `${stockInfo.tickerSymbol}:TADAWUL`;
       
-      // Fetch statistics from Twelve Data API
-      const url = `${API_URL}/statistics?symbol=${formattedSymbol}&apikey=${API_KEY}`;
-      const response = await this.fetchWithCache(url);
+      // First try to get from cache
+      const cacheKey = `fundamentals_${formattedSymbol}`;
+      const cached = this.getFromCache(cacheKey);
+      if (cached) return cached;
 
-      if (!response || !response.statistics) {
-        throw new Error('Invalid response from statistics endpoint');
-      }
+      // Fetch fundamental data with retry logic
+      const data = await this.fetchFundamentalData(formattedSymbol);
+      if (!data) return null;
 
-      const stats = response.statistics;
+      // Format and cache the response
+      const fundamentals = this.formatFundamentalData(data, stockInfo);
+      this.addToCache(cacheKey, fundamentals);
 
-      // Transform API response into our FundamentalData structure
-      const fundamentalData: FundamentalData = {
-        symbol: stockInfo.symbol,
-        name: stockInfo.name,
-        sector: stockInfo.sector,
-        valuation_metrics: {
-          market_capitalization: stats.valuations_metrics?.market_capitalization,
-          enterprise_value: stats.valuations_metrics?.enterprise_value,
-          trailing_pe: stats.valuations_metrics?.trailing_pe,
-          forward_pe: stats.valuations_metrics?.forward_pe,
-          peg_ratio: stats.valuations_metrics?.peg_ratio,
-          price_to_sales_ttm: stats.valuations_metrics?.price_to_sales_ttm,
-          price_to_book_mrq: stats.valuations_metrics?.price_to_book_mrq,
-          enterprise_to_revenue: stats.valuations_metrics?.enterprise_to_revenue,
-          enterprise_to_ebitda: stats.valuations_metrics?.enterprise_to_ebitda
-        },
-        financials: {
-          gross_margin: stats.financials?.gross_margin,
-          profit_margin: stats.financials?.profit_margin,
-          operating_margin: stats.financials?.operating_margin,
-          return_on_assets_ttm: stats.financials?.return_on_assets_ttm,
-          return_on_equity_ttm: stats.financials?.return_on_equity_ttm,
-          income_statement: {
-            revenue_ttm: stats.financials?.income_statement?.revenue_ttm,
-            revenue_per_share_ttm: stats.financials?.income_statement?.revenue_per_share_ttm,
-            quarterly_revenue_growth: stats.financials?.income_statement?.quarterly_revenue_growth,
-            gross_profit_ttm: stats.financials?.income_statement?.gross_profit_ttm,
-            ebitda: stats.financials?.income_statement?.ebitda,
-            net_income_to_common_ttm: stats.financials?.income_statement?.net_income_to_common_ttm,
-            diluted_eps_ttm: stats.financials?.income_statement?.diluted_eps_ttm,
-            quarterly_earnings_growth_yoy: stats.financials?.income_statement?.quarterly_earnings_growth_yoy
-          },
-          balance_sheet: {
-            total_cash_mrq: stats.financials?.balance_sheet?.total_cash_mrq,
-            total_cash_per_share_mrq: stats.financials?.balance_sheet?.total_cash_per_share_mrq,
-            total_debt_mrq: stats.financials?.balance_sheet?.total_debt_mrq,
-            total_debt_to_equity_mrq: stats.financials?.balance_sheet?.total_debt_to_equity_mrq,
-            current_ratio_mrq: stats.financials?.balance_sheet?.current_ratio_mrq,
-            book_value_per_share_mrq: stats.financials?.balance_sheet?.book_value_per_share_mrq
-          },
-          cash_flow: {
-            operating_cash_flow_ttm: stats.financials?.cash_flow?.operating_cash_flow_ttm,
-            levered_free_cash_flow_ttm: stats.financials?.cash_flow?.levered_free_cash_flow_ttm
-          }
-        },
-        dividends: {
-          forward_annual_dividend_rate: stats.dividends_and_splits?.forward_annual_dividend_rate,
-          forward_annual_dividend_yield: stats.dividends_and_splits?.forward_annual_dividend_yield,
-          trailing_annual_dividend_rate: stats.dividends_and_splits?.trailing_annual_dividend_rate,
-          trailing_annual_dividend_yield: stats.dividends_and_splits?.trailing_annual_dividend_yield,
-          five_year_average_dividend_yield: stats.dividends_and_splits?.["5_year_average_dividend_yield"],
-          payout_ratio: stats.dividends_and_splits?.payout_ratio,
-          dividend_date: stats.dividends_and_splits?.dividend_date,
-          ex_dividend_date: stats.dividends_and_splits?.ex_dividend_date
-        },
-        stock_statistics: {
-          shares_outstanding: stats.stock_statistics?.shares_outstanding,
-          float_shares: stats.stock_statistics?.float_shares,
-          avg_volume_10d: stats.stock_statistics?.avg_10_volume,
-          avg_volume_90d: stats.stock_statistics?.avg_90_volume,
-          short_ratio: stats.stock_statistics?.short_ratio,
-          percent_held_by_insiders: stats.stock_statistics?.percent_held_by_insiders,
-          percent_held_by_institutions: stats.stock_statistics?.percent_held_by_institutions
-        }
-      };
-
-      return fundamentalData;
-
+      return fundamentals;
     } catch (error) {
       console.error(`Error fetching fundamental data for ${symbol}:`, error);
       return null;
     }
   }
 
-  static async getSectorAverages(sector: string): Promise<{
-    avg_pe?: number;
-    avg_market_cap?: number;
-    avg_dividend_yield?: number;
-    avg_revenue_growth?: number;
-    best_performer?: { symbol: string; name: string; growth: number };
-    worst_performer?: { symbol: string; name: string; growth: number };
-  }> {
+  private static async fetchFundamentalData(symbol: string, retries = 2): Promise<any> {
     try {
-      const sectorStocks = SAUDI_SYMBOLS.filter(stock => stock.sector === sector);
-      const fundamentalsPromises = sectorStocks.map(stock => this.getFundamental(stock.symbol));
-      const results = await Promise.all(fundamentalsPromises);
-      
-      const validResults = results.filter((result): result is FundamentalData => result !== null);
-      
-      if (validResults.length === 0) {
-        return {};
+      const url = `${API_URL}/statistics?symbol=${symbol}&apikey=${API_KEY}`;
+      console.log('Fetching fundamentals for:', symbol);
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      // Check for valid data structure
+      if (!data || data.status === 'error' || !data.statistics) {
+        throw new Error('Invalid data structure received');
       }
 
-      const sectorData = {
-        avg_pe: this.calculateAverage(validResults.map(r => r.valuation_metrics?.trailing_pe)),
-        avg_market_cap: this.calculateAverage(validResults.map(r => r.valuation_metrics?.market_capitalization)),
-        avg_dividend_yield: this.calculateAverage(validResults.map(r => r.dividends?.trailing_annual_dividend_yield)),
-        avg_revenue_growth: this.calculateAverage(validResults.map(r => r.financials?.income_statement?.quarterly_revenue_growth))
-      };
-
-      // Find best and worst performers based on revenue growth
-      const performanceData = validResults
-        .map(result => ({
-          symbol: result.symbol,
-          name: result.name,
-          growth: result.financials?.income_statement?.quarterly_revenue_growth || 0
-        }))
-        .sort((a, b) => b.growth - a.growth);
-
-      return {
-        ...sectorData,
-        best_performer: performanceData[0],
-        worst_performer: performanceData[performanceData.length - 1]
-      };
-
+      return data;
     } catch (error) {
-      console.error(`Error calculating sector averages for ${sector}:`, error);
-      return {};
+      if (retries > 0) {
+        console.log(`Retrying fundamental data fetch for ${symbol}, attempts left: ${retries}`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return this.fetchFundamentalData(symbol, retries - 1);
+      }
+      throw error;
     }
   }
 
-  private static calculateAverage(numbers: (number | undefined)[]): number | undefined {
-    const validNumbers = numbers.filter((n): n is number => typeof n === 'number' && !isNaN(n));
-    if (validNumbers.length === 0) return undefined;
-    return validNumbers.reduce((sum, n) => sum + n, 0) / validNumbers.length;
+  static async getSectorAverages(sector: string): Promise<any> {
+    try {
+      // Get all stocks in the sector
+      const sectorStocks = SAUDI_SYMBOLS.filter(stock => stock.sector === sector);
+      if (!sectorStocks.length) return {};
+
+      // Get fundamentals with basic error handling for each stock
+      const fundamentalsPromises = sectorStocks.map(stock => 
+        this.getFundamental(stock.symbol)
+          .catch(error => {
+            console.warn(`Error fetching fundamentals for ${stock.symbol}:`, error);
+            return null;
+          })
+      );
+
+      const results = await Promise.all(fundamentalsPromises);
+      const validResults = results.filter(result => result !== null);
+
+      if (validResults.length === 0) {
+        console.warn(`No valid fundamental data found for sector: ${sector}`);
+        return this.getDefaultSectorMetrics();
+      }
+
+      return this.calculateSectorAverages(validResults);
+    } catch (error) {
+      console.error(`Error calculating sector averages for ${sector}:`, error);
+      return this.getDefaultSectorMetrics();
+    }
+  }
+
+  private static formatFundamentalData(data: any, stockInfo: any) {
+    const stats = data.statistics || {};
+    
+    return {
+      symbol: stockInfo.symbol,
+      name: stockInfo.name,
+      sector: stockInfo.sector,
+      metrics: {
+        valuation: {
+          market_cap: this.safeNumber(stats.market_capitalization),
+          pe_ratio: this.safeNumber(stats.trailing_pe),
+          price_to_book: this.safeNumber(stats.price_to_book_mrq),
+          ev_to_ebitda: this.safeNumber(stats.enterprise_to_ebitda)
+        },
+        profitability: {
+          gross_margin: this.safeNumber(stats.gross_margin),
+          operating_margin: this.safeNumber(stats.operating_margin),
+          net_margin: this.safeNumber(stats.profit_margin),
+          roe: this.safeNumber(stats.return_on_equity_ttm),
+          roa: this.safeNumber(stats.return_on_assets_ttm)
+        },
+        growth: {
+          revenue_growth: this.safeNumber(stats.quarterly_revenue_growth),
+          earnings_growth: this.safeNumber(stats.quarterly_earnings_growth)
+        }
+      }
+    };
+  }
+
+  private static getDefaultSectorMetrics() {
+    return {
+      averages: {
+        pe_ratio: null,
+        market_cap: null,
+        price_to_book: null,
+        operating_margin: null,
+        net_margin: null,
+        roe: null
+      },
+      status: 'limited_data'
+    };
+  }
+
+  private static safeNumber(value: any): number | null {
+    if (value === null || value === undefined) return null;
+    const num = Number(value);
+    return isNaN(num) ? null : num;
+  }
+
+  private static getFromCache(key: string): any {
+    const cached = this.cache.get(key);
+    if (!cached) return null;
+    
+    const now = Date.now();
+    if (now - cached.timestamp > this.CACHE_DURATION) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    return cached.data;
+  }
+
+  private static addToCache(key: string, data: any): void {
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now()
+    });
+  }
+
+  private static calculateSectorAverages(results: any[]): any {
+    const metrics = [
+      'pe_ratio', 'market_cap', 'price_to_book', 
+      'operating_margin', 'net_margin', 'roe'
+    ];
+
+    const sums = {};
+    const counts = {};
+
+    results.forEach(result => {
+      if (!result?.metrics) return;
+
+      metrics.forEach(metric => {
+        const value = this.getMetricValue(result.metrics, metric);
+        if (value !== null) {
+          sums[metric] = (sums[metric] || 0) + value;
+          counts[metric] = (counts[metric] || 0) + 1;
+        }
+      });
+    });
+
+    const averages = {};
+    metrics.forEach(metric => {
+      averages[metric] = counts[metric] ? sums[metric] / counts[metric] : null;
+    });
+
+    return {
+      averages,
+      status: 'success',
+      sample_size: results.length
+    };
+  }
+
+  private static getMetricValue(metrics: any, metric: string): number | null {
+    const paths = {
+      pe_ratio: ['valuation', 'pe_ratio'],
+      market_cap: ['valuation', 'market_cap'],
+      price_to_book: ['valuation', 'price_to_book'],
+      operating_margin: ['profitability', 'operating_margin'],
+      net_margin: ['profitability', 'net_margin'],
+      roe: ['profitability', 'roe']
+    };
+
+    const path = paths[metric];
+    if (!path) return null;
+
+    let value = metrics;
+    for (const key of path) {
+      value = value?.[key];
+      if (value === undefined || value === null) return null;
+    }
+
+    return this.safeNumber(value);
   }
 }
